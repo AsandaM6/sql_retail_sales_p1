@@ -159,18 +159,159 @@ SELECT shift, COUNT(*) as total_orders FROM hourly_sales
 GROUP BY shift;
 ```
 
+11. **Find the total revenue generated per day.**
+```sql
+SELECT sale_date, SUM(total_sale) as daily_sale 
+FROM retail_sales
+GROUP BY sale_date
+ORDER BY sale_date;
+```
+
+12. **Which category had the highest average sale per transaction?**
+```sql
+SELECT category, AVG(total_sale) as avg_sale
+FROM retail_sales
+GROUP BY category
+ORDER BY AVG(total_sale) DESC
+LIMIT 1;
+```
+
+13. **Find the number of transactions by age group (e.g., 18–25, 26–35, etc.).**
+```sql
+WITH sales
+AS
+(
+SELECT
+	CASE 
+		WHEN age BETWEEN 18 AND 25 THEN '18-25'
+		WHEN age BETWEEN 26 AND 35 THEN '26-35'
+		WHEN age BETWEEN 36 AND 47 THEN '36-47'
+	 	ELSE '47+'
+	END as age_group
+FROM retail_sales)
+SELECT age_group, COUNT(*) as num_trans
+FROM sales
+GROUP BY age_group
+ORDER BY num_trans DESC;
+-- or this question can be answered as follows
+SELECT
+	CASE 
+		WHEN age BETWEEN 18 AND 25 THEN '18-25'
+		WHEN age BETWEEN 26 AND 35 THEN '26-35'
+		WHEN age BETWEEN 36 AND 47 THEN '36-47'
+	 	ELSE '47+'
+	END as age_group, COUNT(*) as num_trans
+FROM retail_sales
+GROUP BY age_group
+ORDER BY num_trans DESC;
+```
+
+14. **What is the average quantity sold per category and gender?**
+```sql
+SELECT category, gender, ROUND(AVG(quantiy),4) AS avg_quant
+FROM retail_sales
+GROUP BY category, gender
+ORDER BY category;
+```
+
+15. **Which customer made the most purchases in a single day?**
+```sql
+SELECT customer_id, sale_date, COUNT(*) AS num_pur 
+FROM retail_sales
+GROUP BY customer_id, sale_date
+ORDER BY num_pur DESC
+LIMIT 1;
+```
+
+16. **Which day of the week generates the most revenue on average?**
+```sql
+SELECT TO_CHAR(sale_date, 'Day') AS weekday, AVG(total_sale) AS avg_rev
+FROM retail_sales
+GROUP BY sale_date
+ORDER BY avg_rev DESC
+LIMIT 1;
+```
+
+17. Find the monthly sales growth rate.
+```sql
+WITH monthly_sales
+AS(
+SELECT 
+	EXTRACT(YEAR FROM sale_date) AS year,
+	EXTRACT(MONTH FROM sale_date) AS month,
+	SUM(total_sale) AS total
+FROM retail_sales
+GROUP BY year, month
+ORDER BY year, month
+),
+growth 
+AS(
+SELECT month, total, LAG(total) OVER(ORDER BY month) AS prev_total
+FROM monthly_sales
+)
+SELECT
+	month, 
+	ROUND(((total- prev_total)/NULLIF(prev_total, 0)* 100)::numeric,2) AS growth_rate
+FROM growth;
+```
+
+18. **Identify the top product category for each gender.**
+```sql
+WITH prod_cut
+AS(
+SELECT category, gender, SUM(total_sale) AS sales,
+	RANK() OVER(
+		PARTITION BY gender
+		ORDER BY SUM(total_sale) DESC
+	) AS rank
+FROM retail_sales
+GROUP BY gender, category
+)
+SELECT gender, category, sales
+FROM prod_cut
+WHERE rank=1;
+```
+
+19. Determine the average time between repeat purchases per customer.
+```sql
+WITH cust_orders
+AS(
+SELECT customer_id, sale_date,
+	LAG(sale_date) OVER(
+	PARTITION BY customer_id
+	ORDER BY sale_date
+	) AS prev_pur_date
+FROM retail_sales
+),
+time_diff
+AS(
+SELECT customer_id, sale_date, prev_pur_date,
+	(sale_date - prev_pur_date) AS days_between
+FROM cust_orders
+WHERE prev_pur_date IS NOT NULL
+)
+SELECT 
+	customer_id,
+	ROUND(AVG(days_between),2) AS avg_days_between_pur
+FROM time_diff
+GROUP BY customer_id
+ORDER BY avg_days_between_pur;
+```
+
 ## Findings
 
-- **Customer Demographics**: The dataset includes customers from various age groups, with sales distributed across different categories such as Clothing and Beauty.
+- **Customer Demographics**: The dataset includes customers from various age groups, with a near-equal gender distribution.
+- **Category Insights**: Popular categories like Clothing and Beauty had the highest number of purchases. Beauty buyers had a slightly lower average age.
 - **High-Value Transactions**: Several transactions had a total sale amount greater than 1000, indicating premium purchases.
-- **Sales Trends**: Monthly analysis shows variations in sales, helping identify peak seasons.
-- **Customer Insights**: The analysis identifies the top-spending customers and the most popular product categories.
+- **Sales Trends**: Monthly analysis shows variations in sales, helping identify peak seasons. The best-selling month in each year was identified by analyzing average monthly sales. Sales distribution across shifts showed that most purchases occurred in the Afternoon and Evening.
+- **Customer Insights**: The analysis identifies the top-spending customers and the most popular product categories. The average time between repeat purchases per customer was calculated, helping to understand engagement frequency.
 
 ## Reports
 
-- **Sales Summary**: A detailed report summarizing total sales, customer demographics, and category performance.
+- **Sales Summary**: A detailed report summarizing total sales, customer demographics, and category performance. Top-selling months and products by revenue.
 - **Trend Analysis**: Insights into sales trends across different months and shifts.
-- **Customer Insights**: Reports on top customers and unique customer counts per category.
+- **Customer Insights**: Reports on top customers and unique customer counts per category. Repeat purchase behavior and average gap between visits.
+- **Time-Based Analytics**: Revenue trends by date and month. Average sales by day of the week. Monthly sales growth rates.
 
 ## Conclusion
 
