@@ -152,3 +152,125 @@ SELECT *,
 FROM retail_sales)
 SELECT shift, COUNT(*) as total_orders FROM hourly_sales
 GROUP BY shift;
+
+-- 11. Find the total revenue generated per day.
+SELECT sale_date, SUM(total_sale) as daily_sale 
+FROM retail_sales
+GROUP BY sale_date
+ORDER BY sale_date;
+
+-- 12. Which category had the highest average sale per transaction?
+SELECT category, AVG(total_sale) as avg_sale
+FROM retail_sales
+GROUP BY category
+ORDER BY AVG(total_sale) DESC
+LIMIT 1;
+
+-- 13. Find the number of transactions by age group (e.g., 18–25, 26–35, etc.).
+WITH sales
+AS
+(
+SELECT
+	CASE 
+		WHEN age BETWEEN 18 AND 25 THEN '18-25'
+		WHEN age BETWEEN 26 AND 35 THEN '26-35'
+		WHEN age BETWEEN 36 AND 47 THEN '36-47'
+	 	ELSE '47+'
+	END as age_group
+FROM retail_sales)
+SELECT age_group, COUNT(*) as num_trans
+FROM sales
+GROUP BY age_group
+ORDER BY num_trans DESC;
+
+-- or this question can be simply answered as follows
+SELECT
+	CASE 
+		WHEN age BETWEEN 18 AND 25 THEN '18-25'
+		WHEN age BETWEEN 26 AND 35 THEN '26-35'
+		WHEN age BETWEEN 36 AND 47 THEN '36-47'
+	 	ELSE '47+'
+	END as age_group, COUNT(*) as num_trans
+FROM retail_sales
+GROUP BY age_group
+ORDER BY num_trans DESC;
+
+-- 14. What is the average quantity sold per category and gender?
+SELECT category, gender, ROUND(AVG(quantiy),4) AS avg_quant
+FROM retail_sales
+GROUP BY category, gender
+ORDER BY category;
+
+-- 15. Which customer made the most purchases in a single day?
+SELECT customer_id, sale_date, COUNT(*) AS num_pur 
+FROM retail_sales
+GROUP BY customer_id, sale_date
+ORDER BY num_pur DESC
+LIMIT 1;
+
+-- 16. Which day of the week generates the most revenue on average?
+SELECT TO_CHAR(sale_date, 'Day') AS weekday, AVG(total_sale) AS avg_rev
+FROM retail_sales
+GROUP BY sale_date
+ORDER BY avg_rev DESC
+LIMIT 1;
+
+-- 17. Find monthly sales growth rate.
+WITH monthly_sales
+AS(
+SELECT 
+	EXTRACT(YEAR FROM sale_date) AS year,
+	EXTRACT(MONTH FROM sale_date) AS month,
+	SUM(total_sale) AS total
+FROM retail_sales
+GROUP BY year, month
+ORDER BY year, month
+),
+growth 
+AS(
+SELECT month, total, LAG(total) OVER(ORDER BY month) AS prev_total
+FROM monthly_sales
+)
+SELECT
+	month, 
+	ROUND(((total- prev_total)/NULLIF(prev_total, 0)* 100)::numeric,2) AS growth_rate
+FROM growth;
+
+-- 18. Identify the top product category for each gender.
+WITH prod_cut
+AS(
+SELECT category, gender, SUM(total_sale) AS sales,
+	RANK() OVER(
+		PARTITION BY gender
+		ORDER BY SUM(total_sale) DESC
+	) AS rank
+FROM retail_sales
+GROUP BY gender, category
+)
+SELECT gender,category, sales
+FROM prod_cut
+WHERE rank=1;
+
+-- 19. Determine the average time between repeat purchases per customer.
+WITH cust_orders
+AS(
+SELECT customer_id, sale_date,
+	LAG(sale_date) OVER(
+	PARTITION BY customer_id
+	ORDER BY sale_date
+	) AS prev_pur_date
+FROM retail_sales
+),
+time_diff
+AS(
+SELECT customer_id, sale_date, prev_pur_date,
+	(sale_date - prev_pur_date) AS days_between
+FROM cust_orders
+WHERE prev_pur_date IS NOT NULL
+)
+SELECT 
+	customer_id,
+	ROUND(AVG(days_between),2) AS avg_days_between_pur
+FROM time_diff
+GROUP BY customer_id
+ORDER BY avg_days_between_pur;
